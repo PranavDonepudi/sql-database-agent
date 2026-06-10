@@ -189,14 +189,19 @@
   if (token) showApp();
 
   function renderChips() {
-    document.getElementById("chips").innerHTML = SAMPLES.map(s =>
-      `<span class="chip" onclick="useChip('${s.replace(/'/g,"\\'")}'">${s}</span>`
-    ).join("");
-  }
-
-  function useChip(q) {
-    document.getElementById("question-input").value = q;
-    sendQuery();
+    const container = document.getElementById("chips");
+    container.innerHTML = "";
+    SAMPLES.forEach(s => {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.textContent = s;
+      chip.addEventListener("click", () => {
+        const input = document.getElementById("question-input");
+        input.value = s;
+        sendQuery();
+      });
+      container.appendChild(chip);
+    });
   }
 
   // ── Auth ────────────────────────────────────────────────────
@@ -351,28 +356,44 @@
     btn.querySelector(".arrow").textContent = open ? "▼" : "▶";
   }
 
+  let _querying = false;
+
   // ── Query ───────────────────────────────────────────────────
   async function sendQuery() {
     const input = document.getElementById("question-input");
     const q = input.value.trim();
-    if (!q) return;
+    if (!q || _querying) return;
+    _querying = true;
     const btn = document.getElementById("send-btn");
     btn.disabled = true;
     input.value = ""; input.style.height = "auto";
     addUserMsg(q); addTyping();
+
+    // Abort after 90s so finally() always runs and button is re-enabled
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 90000);
+
     try {
       const res = await fetch("/query", {
         method: "POST",
         headers: {"Content-Type":"application/json", Authorization: `Bearer ${token}`},
         body: JSON.stringify({question: q}),
+        signal: controller.signal,
       });
+      clearTimeout(timer);
       const data = await res.json();
       removeTyping(); addAgentMsg(data);
-    } catch {
+    } catch (err) {
+      clearTimeout(timer);
       removeTyping();
-      addAgentMsg({error: "Could not reach the server. Please try again."});
+      const msg = err?.name === "AbortError"
+        ? "Request timed out. Please try again."
+        : "Could not reach the server. Please try again.";
+      addAgentMsg({error: msg});
     } finally {
-      btn.disabled = false; input.focus();
+      _querying = false;
+      btn.disabled = false;
+      input.focus();
     }
   }
 
