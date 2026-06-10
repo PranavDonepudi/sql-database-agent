@@ -2,4 +2,4 @@
 cmds = ["python setup_db.py"]
 
 [start]
-cmd = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+cmd = "sh -c 'uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}'"
