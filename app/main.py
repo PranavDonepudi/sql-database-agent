@@ -1,7 +1,9 @@
+import os
+import traceback
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from app.auth import authenticate_user, create_access_token, get_current_user
 from app.agent import run_agent
@@ -53,8 +55,24 @@ class QueryRequest(BaseModel):
 def query(body: QueryRequest, username: str = Depends(get_current_user)):
     if not body.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
-    result = run_agent(body.question)
-    return result
+    try:
+        result = run_agent(body.question)
+        return result
+    except Exception as e:
+        tb = traceback.format_exc()
+        print("QUERY ERROR:", tb)
+        # Return as JSON so the frontend can display the error message
+        return JSONResponse(
+            status_code=200,
+            content={
+                "question": body.question,
+                "sql": "",
+                "columns": [],
+                "rows": [],
+                "explanation": "",
+                "error": f"LLM error: {str(e)}",
+            }
+        )
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -62,6 +80,20 @@ def query(body: QueryRequest, username: str = Depends(get_current_user)):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# ── Debug — shows env config (no secrets) ────────────────────────────────────
+
+@app.get("/debug/config")
+def debug_config():
+    """Shows which LLM provider and model are active. No secrets exposed."""
+    return {
+        "llm_provider": os.getenv("LLM_PROVIDER", "ollama (default)"),
+        "ollama_model": os.getenv("OLLAMA_MODEL", "not set"),
+        "groq_model": os.getenv("GROQ_MODEL", "not set"),
+        "groq_key_set": bool(os.getenv("GROQ_API_KEY", "")),
+        "db_path": os.getenv("DB_PATH", "./data/chinook.db"),
+    }
 
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
