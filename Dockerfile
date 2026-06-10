@@ -12,7 +12,9 @@ COPY . .
 # Download Chinook DB at build time
 RUN python setup_db.py
 
-# HuggingFace Spaces runs on port 7860
+# Railway injects $PORT dynamically; HuggingFace Spaces uses 7860
 EXPOSE 7860
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"]
+# Use shell form so $PORT is expanded at runtime
+# Falls back to 7860 if PORT is not set (HuggingFace Spaces)
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860}"]
